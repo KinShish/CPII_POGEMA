@@ -26,7 +26,6 @@ class AStar:
         self.old_position = (0, 0)
         self.repeat = 0
         self.stop = 0
-        self.temporary_target = 0
 
     def compute_shortest_path(self, start, goal):
         self.start = start
@@ -39,7 +38,7 @@ class AStar:
         while len(self.OPEN) > 0 and steps < self.max_steps and (u.i, u.j) != self.goal:
             u = heappop(self.OPEN)
             steps += 1
-            for d in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+            for d in self.compass:
                 n = (u.i+d[0], u.j + d[1])
                 if n not in self.obstacles and n not in self.CLOSED and (n not in self.other_agents):# or d[0] == 1 or d[1] == 1
                     h = abs(n[0] - self.goal[0]) + abs(n[1] - self.goal[1])  # Manhattan distance as a heuristic function
@@ -54,19 +53,15 @@ class AStar:
                 next_node = self.CLOSED[next_node]
         return next_node
 
-    def watch_repeat(self, move):
+    def watch_repeat(self, move,k):
         # 1 - вверх, 2 - вниз, 3 -влево, 4 - вправо, 0 - пропуск
         if (move == 1 and self.last_move == 2) or (
             move == 2 and self.last_move == 1) or (
             move == 3 and self.last_move == 4) or (
-            move == 4 and self.last_move == 3):
+            move == 4 and self.last_move == 3) or move == 0:
                 self.repeat += 1
         else:
             self.repeat = 0
-        if move == self.last_move and self.stop == 0:
-            self.temporary_target += 1
-        else:
-            self.temporary_target = 0
         self.last_move = move
 
     def reset_position(self, obs, positions_xy):
@@ -122,16 +117,13 @@ class Model:
             self.agents[k].reset_position(obs[k][0], positions_xy[k])
             position = (positions_xy[k][0] - self.agents[k].old_position[0], positions_xy[k][1] - self.agents[k].old_position[1])
             target = (targets_xy[k][0] - self.agents[k].old_position[0], targets_xy[k][1] - self.agents[k].old_position[1])
-            if self.agents[k].temporary_target > 3:
-                target = (target[1], target[0])
-                self.agents[k].temporary_target -=1
             self.agents[k].update_obstacles(obs[k][0], obs[k][1], (position[0] - 5, position[1] - 5))
             self.agents[k].update_compass(obs[k][2])
             self.agents[k].compute_shortest_path(start=position, goal=target)
             next_node = self.agents[k].get_next_node()
             if self.agents[k].stop == 0:
                 actions.append(self.actions[(next_node[0] - position[0], next_node[1] - position[1])])
-                self.agents[k].watch_repeat(actions[k])
+                self.agents[k].watch_repeat(actions[k],k)
             else:
                 self.agents[k].stop -= 1
                 actions.append(self.actions[(next_node[1] - position[1], next_node[0] - position[0])])

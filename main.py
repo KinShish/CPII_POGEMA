@@ -9,10 +9,10 @@ import model.agent as Agent
 agent = Agent.Model()
 
 # Define random configuration
-grid_config = GridConfig(num_agents=30, # количество агентов на карте
-                         size=80,      # размеры карты
-                         density=0.3,  # плотность препятствий
-                         seed=5,       # сид генерации задания
+grid_config = GridConfig(num_agents=25, # количество агентов на карте
+                         size=50,      # размеры карты
+                         density=0.4,  # плотность препятствий
+                         seed=2,       # сид генерации задания
                          max_episode_steps=256,  # максимальная длина эпизода
                          obs_radius=5, # радиус обзора
                         )
