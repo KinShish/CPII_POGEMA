@@ -24,13 +24,16 @@ env = AnimationMonitor(env)
 obs = env.reset()
 
 done = [False for k in range(len(obs))]
+steps = 0
 
 while not all(done):
     # Используем случайную стратегию
     #print(reward)
     #move = agent.act(obs, done, positions_xy, [])
     # 1 - вверх, 2 - вниз, 3 -влево, 4 - вправо, 0 - пропуск
+    steps += 1
     obs, reward, done, info = env.step(agent.act(obs, done, env.get_agents_xy_relative(), env.get_targets_xy_relative()))
 # сохраняем анимацию и рисуем ее
-env.save_animation("render.svg", egocentric_idx=1)
+print(steps)
+env.save_animation("render.svg", egocentric_idx=None)
 display(SVG('render.svg'))

@@ -21,6 +21,7 @@ class AStar:
         self.CLOSED = dict()
         self.obstacles = set()
         self.other_agents = set()
+        self.compass = []
         self.last_move = None
         self.old_position = (0, 0)
 
@@ -37,6 +38,7 @@ class AStar:
             steps += 1
             for d in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
                 n = (u.i+d[0], u.j + d[1])
+
                 if n not in self.obstacles and n not in self.CLOSED and (n not in self.other_agents or d[0] == 1 or d[1] == 1):
                     h = abs(n[0] - self.goal[0]) + abs(n[1] - self.goal[1])  # Manhattan distance as a heuristic function
                     heappush(self.OPEN, Node(n, u.g + 1, h))
@@ -59,6 +61,18 @@ class AStar:
                     obstacle = self.obstacles.pop()
                     obstacles.add((obstacle[0] - positions_xy[0], obstacle[1] - positions_xy[1]))
                 self.obstacles = obstacles
+
+    def update_compass(self, comp):
+        self.compass.clear()
+        compass = np.transpose(np.nonzero(comp))[0]
+        if compass[1] > 5:
+            self.compass.extend([(-1, 0), (1, 0)])
+        else:
+            self.compass.extend([(1, 0), (-1, 0)])
+        if compass[0] > 5:
+            self.compass.extend([(0, 1), (0, -1)])
+        else:
+            self.compass.extend([(0, -1), (0, 1)])
 
     def update_obstacles(self, obs, other_agents, n):
         obstacles = np.transpose(np.nonzero(obs))  # get the coordinates of all obstacles in current observation
@@ -89,6 +103,7 @@ class Model:
             position = (positions_xy[k][0] - self.agents[k].old_position[0], positions_xy[k][1] - self.agents[k].old_position[1])
             target = (targets_xy[k][0] - self.agents[k].old_position[0], targets_xy[k][1] - self.agents[k].old_position[1])
             self.agents[k].update_obstacles(obs[k][0], obs[k][1], (position[0] - 5, position[1] - 5))
+            self.agents[k].update_compass(obs[k][2])
             self.agents[k].compute_shortest_path(start=position, goal=target)
             next_node = self.agents[k].get_next_node()
             actions.append(self.actions[(next_node[0] - position[0], next_node[1] - position[1])])
