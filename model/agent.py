@@ -21,8 +21,12 @@ class AStar:
         self.CLOSED = dict()
         self.obstacles = set()
         self.other_agents = set()
+        self.compass = []
         self.last_move = None
         self.old_position = (0, 0)
+        self.repeat = 0
+        self.stop = 0
+        self.temporary_target = 0
 
     def compute_shortest_path(self, start, goal):
         self.start = start
@@ -37,7 +41,7 @@ class AStar:
             steps += 1
             for d in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
                 n = (u.i+d[0], u.j + d[1])
-                if n not in self.obstacles and n not in self.CLOSED and (n not in self.other_agents or d[0] == 1 or d[1] == 1):
+                if n not in self.obstacles and n not in self.CLOSED and (n not in self.other_agents):# or d[0] == 1 or d[1] == 1
                     h = abs(n[0] - self.goal[0]) + abs(n[1] - self.goal[1])  # Manhattan distance as a heuristic function
                     heappush(self.OPEN, Node(n, u.g + 1, h))
                     self.CLOSED[n] = (u.i, u.j)  # store information about the predecessor
@@ -50,6 +54,21 @@ class AStar:
                 next_node = self.CLOSED[next_node]
         return next_node
 
+    def watch_repeat(self, move):
+        # 1 - вверх, 2 - вниз, 3 -влево, 4 - вправо, 0 - пропуск
+        if (move == 1 and self.last_move == 2) or (
+            move == 2 and self.last_move == 1) or (
+            move == 3 and self.last_move == 4) or (
+            move == 4 and self.last_move == 3):
+                self.repeat += 1
+        else:
+            self.repeat = 0
+        if move == self.last_move and self.stop == 0:
+            self.temporary_target += 1
+        else:
+            self.temporary_target = 0
+        self.last_move = move
+
     def reset_position(self, obs, positions_xy):
         if self.old_position == (0, 0) and self.last_move:
             if (self.last_move == 3 and np.sum(np.matrix(obs)[:, 0]) == 11) or (self.last_move == 4 and np.sum(np.matrix(obs)[:, 10]) == 11) or (self.last_move == 1 and np.sum(np.matrix(obs)[:0, ]) == 11) or (self.last_move == 2 and np.sum(np.matrix(obs)[:10, ]) == 11):
@@ -60,6 +79,18 @@ class AStar:
                     obstacles.add((obstacle[0] - positions_xy[0], obstacle[1] - positions_xy[1]))
                 self.obstacles = obstacles
 
+    def update_compass(self, comp):
+        self.compass.clear()
+        compass = np.transpose(np.nonzero(comp))[0]
+        if compass[1] > 5:
+            self.compass.extend([(-1, 0), (1, 0)])
+        else:
+            self.compass.extend([(1, 0), (-1, 0)])
+        if compass[0] > 5:
+            self.compass.extend([(0, 1), (0, -1)])
+        else:
+            self.compass.extend([(0, -1), (0, 1)])
+
     def update_obstacles(self, obs, other_agents, n):
         obstacles = np.transpose(np.nonzero(obs))  # get the coordinates of all obstacles in current observation
         for obstacle in obstacles:
@@ -67,6 +98,7 @@ class AStar:
         self.other_agents.clear()  # forget previously seen agents as they move
         agents = np.transpose(np.nonzero(other_agents))  # get the coordinates of all agents that are seen
         for agent in agents:
+            #if abs(agent[0]-5) < 2 and abs(agent[1]-5) < 2:
             self.other_agents.add((n[0] + agent[0], n[1] + agent[1]))  # save them with correct coordinates
 
 
@@ -77,7 +109,6 @@ class Model:
                         range(len(GridConfig().MOVES))}  # make a dictionary to translate coordinates of actions into id
 
     def act(self, obs, dones, positions_xy, targets_xy) -> list:
-
         if self.agents is None:
             self.agents = [AStar() for _ in range(len(obs))]  # create a planner for each of the agents
         actions = []
@@ -85,12 +116,23 @@ class Model:
             if positions_xy[k] == targets_xy[k]:  # don't waste time on the agents that have already reached their goals
                 actions.append(0)  # just add useless action to save the order and length of the actions
                 continue
-            self.agents[k].reset_position(obs[k][0],positions_xy[k])
+            if self.agents[k].repeat == 2:
+                self.agents[k].stop = 3
+                self.agents[k].repeat = 0
+            self.agents[k].reset_position(obs[k][0], positions_xy[k])
             position = (positions_xy[k][0] - self.agents[k].old_position[0], positions_xy[k][1] - self.agents[k].old_position[1])
             target = (targets_xy[k][0] - self.agents[k].old_position[0], targets_xy[k][1] - self.agents[k].old_position[1])
+            if self.agents[k].temporary_target > 3:
+                target = (target[1], target[0])
+                self.agents[k].temporary_target -=1
             self.agents[k].update_obstacles(obs[k][0], obs[k][1], (position[0] - 5, position[1] - 5))
+            self.agents[k].update_compass(obs[k][2])
             self.agents[k].compute_shortest_path(start=position, goal=target)
             next_node = self.agents[k].get_next_node()
-            actions.append(self.actions[(next_node[0] - position[0], next_node[1] - position[1])])
-            self.agents[k].last_move = actions[k]
+            if self.agents[k].stop == 0:
+                actions.append(self.actions[(next_node[0] - position[0], next_node[1] - position[1])])
+                self.agents[k].watch_repeat(actions[k])
+            else:
+                self.agents[k].stop -= 1
+                actions.append(self.actions[(next_node[1] - position[1], next_node[0] - position[0])])
         return actions

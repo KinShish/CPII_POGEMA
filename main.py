@@ -5,14 +5,14 @@ from IPython.display import SVG, display
 
 import pogema
 from pogema import GridConfig
-import model.agent_1 as Agent
+import model.agent as Agent
 agent = Agent.Model()
 
 # Define random configuration
-grid_config = GridConfig(num_agents=12, # количество агентов на карте
-                         size=40,      # размеры карты
+grid_config = GridConfig(num_agents=30, # количество агентов на карте
+                         size=80,      # размеры карты
                          density=0.3,  # плотность препятствий
-                         seed=1,       # сид генерации задания
+                         seed=5,       # сид генерации задания
                          max_episode_steps=256,  # максимальная длина эпизода
                          obs_radius=5, # радиус обзора
                         )
