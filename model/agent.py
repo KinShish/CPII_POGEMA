@@ -30,9 +30,6 @@ class AStar:
         self.stop = 0
         self.block_history = 0
         self.inaction = 0
-        self.obs47=set()
-        self.obs38 = set()
-        self.agents47=set()
 
     def compute_shortest_path(self, start, goal):
         self.start = start
@@ -53,18 +50,15 @@ class AStar:
                     heappush(self.OPEN, Node(n, u.g + 1, h))
                     self.CLOSED[n] = (u.i, u.j)  # store information about the predecessor
 
-    def get_open_steps(self):
-        matrix = self.obs47+self.agents47
+    def get_open_steps(self,obs):
+        blocks = np.matrix(obs[0])[3:8, 3:8]
+        matrix = np.matrix(obs[0])[4:7, 4:7]+np.matrix(obs[1])[4:7, 4:7]
         result = []
         # 1 - вверх, 2 - вниз, 3 -влево, 4 - вправо, 0 - пропуск
-        if self.obs47[0, 1]+self.agents47[0, 1] == 0 and (
-                self.obs38[0,2]+self.obs38[1,1]+self.obs38[1,3]!=3 or self.obs38[2,1]+self.obs38[2,3]==0): result.append(1)
-        if self.obs47[2, 1]+self.agents47[2, 1] == 0 and (
-                self.obs38[4,2]+self.obs38[3,1]+self.obs38[3,3]!=3 or self.obs38[2,1]+self.obs38[2,3]==0): result.append(2)
-        if self.obs47[1, 0]+self.agents47[1, 0] == 0 and (
-                self.obs38[1,1]+self.obs38[2,0]+self.obs38[3,1]!=3 or self.obs38[1,2]+self.obs38[3,2]==0): result.append(3)
-        if self.obs47[1, 2]+self.agents47[1, 2] == 0 and (
-                self.obs38[1,3]+self.obs38[2,4]+self.obs38[3,3]!=3 or self.obs38[1,2]+self.obs38[3,2]==0): result.append(4)
+        if matrix[0, 1] == 0 and (blocks[0,2]+blocks[1,1]+blocks[1,3]!=3 or blocks[2,1]+blocks[2,3]==0): result.append(1)
+        if matrix[2, 1] == 0 and (blocks[4,2]+blocks[3,1]+blocks[3,3]!=3 or blocks[2,1]+blocks[2,3]==0): result.append(2)
+        if matrix[1, 0] == 0 and (blocks[1,1]+blocks[2,0]+blocks[3,1]!=3 or blocks[1,2]+blocks[3,2]==0): result.append(3)
+        if matrix[1, 2] == 0 and (blocks[1,3]+blocks[2,4]+blocks[3,3]!=3 or blocks[1,2]+blocks[3,2]==0): result.append(4)
         if len(result) == 0: result.append(0)
         for i in result:
             if i==self.last_move:
@@ -79,8 +73,8 @@ class AStar:
                 next_node = self.CLOSED[next_node]
         return next_node
 
-    def get_time_stop(self):
-        return (6 - np.sum(self.obs47)+self.block_history)//2
+    def get_time_stop(self, obs):
+        return (6 - np.sum(np.matrix(obs)[4:7, 4:7])+self.block_history)//2
 
     def watch_repeat(self, move):
         # 1 - вверх, 2 - вниз, 3 -влево, 4 - вправо, 0 - пропуск
@@ -151,11 +145,8 @@ class Model:
                 actions.append(0)  # just add useless action to save the order and length of the actions
                 continue
             if self.agents[k].repeat > 2:
-                self.agents[k].stop = self.agents[k].get_time_stop()
+                self.agents[k].stop = self.agents[k].get_time_stop(obs[k][0])
                 self.agents[k].repeat = 0
-            self.agents[k].obs47 = np.matrix(obs[k][0])[4:7, 4:7]
-            self.agents[k].obs38 = np.matrix(obs[k][0])[3:8, 3:8]
-            self.agents[k].agents47 = np.matrix(obs[k][1])[4:7, 4:7]
             self.agents[k].reset_position(obs[k][0], positions_xy[k])
             if (self.agents[k].stop == 0 and self.agents[k].stay < 3) or len(self.agents[k].other_agents) == 1:
                 position = (positions_xy[k][0] - self.agents[k].old_position[0], positions_xy[k][1] - self.agents[k].old_position[1])
@@ -171,7 +162,7 @@ class Model:
                 else:
                     self.agents[k].stop = 0
                 if self.agents[k].stay>1:
-                    arr = self.agents[k].get_open_steps()
+                    arr = self.agents[k].get_open_steps(obs[k])
                     if len(arr)>1:
                         actions.append(np.random.choice(arr))
                     else:
@@ -180,5 +171,5 @@ class Model:
                     actions.append(0)
                 self.agents[k].inaction += 1
             self.agents[k].watch_repeat(actions[k])
-            self.agents[k].block_history = (6 - np.sum(self.agents[k].obs47))
+            self.agents[k].block_history = (6 - np.sum(np.matrix(obs[k][0])[4:7, 4:7]))
         return actions
