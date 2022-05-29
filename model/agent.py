@@ -23,9 +23,16 @@ class AStar:
         self.other_agents = set()
         self.compass = []
         self.last_move = None
+        self.stay = 0
         self.old_position = (0, 0)
+        self.Zzz_position = (0, 0)
         self.repeat = 0
         self.stop = 0
+        self.block_history = 0
+        self.inaction = 0
+        self.obs47=set()
+        self.obs38 = set()
+        self.agents47=set()
 
     def compute_shortest_path(self, start, goal):
         self.start = start
@@ -40,10 +47,29 @@ class AStar:
             steps += 1
             for d in self.compass:
                 n = (u.i+d[0], u.j + d[1])
-                if n not in self.obstacles and n not in self.CLOSED and (n not in self.other_agents):# or d[0] == 1 or d[1] == 1
-                    h = abs(n[0] - self.goal[0]) + abs(n[1] - self.goal[1])  # Manhattan distance as a heuristic function
+                h = abs(n[0] - self.goal[0]) + abs(
+                    n[1] - self.goal[1])  # Manhattan distance as a heuristic function
+                if n not in self.obstacles and n not in self.CLOSED and (n not in self.other_agents or d[0] == 1 or d[1] == 1):# or d[0] == 1 or d[1] == 1
                     heappush(self.OPEN, Node(n, u.g + 1, h))
                     self.CLOSED[n] = (u.i, u.j)  # store information about the predecessor
+
+    def get_open_steps(self):
+        matrix = self.obs47+self.agents47
+        result = []
+        # 1 - вверх, 2 - вниз, 3 -влево, 4 - вправо, 0 - пропуск
+        if self.obs47[0, 1]+self.agents47[0, 1] == 0 and (
+                self.obs38[0,2]+self.obs38[1,1]+self.obs38[1,3]!=3 or self.obs38[2,1]+self.obs38[2,3]==0): result.append(1)
+        if self.obs47[2, 1]+self.agents47[2, 1] == 0 and (
+                self.obs38[4,2]+self.obs38[3,1]+self.obs38[3,3]!=3 or self.obs38[2,1]+self.obs38[2,3]==0): result.append(2)
+        if self.obs47[1, 0]+self.agents47[1, 0] == 0 and (
+                self.obs38[1,1]+self.obs38[2,0]+self.obs38[3,1]!=3 or self.obs38[1,2]+self.obs38[3,2]==0): result.append(3)
+        if self.obs47[1, 2]+self.agents47[1, 2] == 0 and (
+                self.obs38[1,3]+self.obs38[2,4]+self.obs38[3,3]!=3 or self.obs38[1,2]+self.obs38[3,2]==0): result.append(4)
+        if len(result) == 0: result.append(0)
+        for i in result:
+            if i==self.last_move:
+                return [self.last_move]
+        return result
 
     def get_next_node(self):
         next_node = self.start  # if path not found, current start position is returned
@@ -53,18 +79,31 @@ class AStar:
                 next_node = self.CLOSED[next_node]
         return next_node
 
-    def watch_repeat(self, move,k):
+    def get_time_stop(self):
+        return (6 - np.sum(self.obs47)+self.block_history)//2
+
+    def watch_repeat(self, move):
         # 1 - вверх, 2 - вниз, 3 -влево, 4 - вправо, 0 - пропуск
-        if (move == 1 and self.last_move == 2) or (
-            move == 2 and self.last_move == 1) or (
-            move == 3 and self.last_move == 4) or (
-            move == 4 and self.last_move == 3) or move == 0:
+        if move != 0:
+            if (move == 1 and self.last_move == 2) or (
+                    move == 2 and self.last_move == 1) or (
+                    move == 3 and self.last_move == 4) or (
+                    move == 4 and self.last_move == 3):
                 self.repeat += 1
-        else:
-            self.repeat = 0
-        self.last_move = move
+                self.stay += 1
+            else:
+                self.repeat = 0
+            self.last_move = move
 
     def reset_position(self, obs, positions_xy):
+        if self.Zzz_position == positions_xy:
+            self.stay += 1
+        else:
+            if self.stay>0:
+                self.stay -= 1
+            else:
+                self.stay = 0
+        self.Zzz_position = positions_xy
         if self.old_position == (0, 0) and self.last_move:
             if (self.last_move == 3 and np.sum(np.matrix(obs)[:, 0]) == 11) or (self.last_move == 4 and np.sum(np.matrix(obs)[:, 10]) == 11) or (self.last_move == 1 and np.sum(np.matrix(obs)[:0, ]) == 11) or (self.last_move == 2 and np.sum(np.matrix(obs)[:10, ]) == 11):
                 self.old_position = positions_xy
@@ -93,7 +132,7 @@ class AStar:
         self.other_agents.clear()  # forget previously seen agents as they move
         agents = np.transpose(np.nonzero(other_agents))  # get the coordinates of all agents that are seen
         for agent in agents:
-            #if abs(agent[0]-5) < 2 and abs(agent[1]-5) < 2:
+            #if abs(agent[0] - 5) < len(agents) and abs(agent[1] - 5) < len(agents):
             self.other_agents.add((n[0] + agent[0], n[1] + agent[1]))  # save them with correct coordinates
 
 
@@ -111,20 +150,35 @@ class Model:
             if positions_xy[k] == targets_xy[k]:  # don't waste time on the agents that have already reached their goals
                 actions.append(0)  # just add useless action to save the order and length of the actions
                 continue
-            if self.agents[k].repeat == 2:
-                self.agents[k].stop = 3
+            if self.agents[k].repeat > 2:
+                self.agents[k].stop = self.agents[k].get_time_stop()
                 self.agents[k].repeat = 0
+            self.agents[k].obs47 = np.matrix(obs[k][0])[4:7, 4:7]
+            self.agents[k].obs38 = np.matrix(obs[k][0])[3:8, 3:8]
+            self.agents[k].agents47 = np.matrix(obs[k][1])[4:7, 4:7]
             self.agents[k].reset_position(obs[k][0], positions_xy[k])
-            position = (positions_xy[k][0] - self.agents[k].old_position[0], positions_xy[k][1] - self.agents[k].old_position[1])
-            target = (targets_xy[k][0] - self.agents[k].old_position[0], targets_xy[k][1] - self.agents[k].old_position[1])
-            self.agents[k].update_obstacles(obs[k][0], obs[k][1], (position[0] - 5, position[1] - 5))
-            self.agents[k].update_compass(obs[k][2])
-            self.agents[k].compute_shortest_path(start=position, goal=target)
-            next_node = self.agents[k].get_next_node()
-            if self.agents[k].stop == 0:
+            if (self.agents[k].stop == 0 and self.agents[k].stay < 3) or len(self.agents[k].other_agents) == 1:
+                position = (positions_xy[k][0] - self.agents[k].old_position[0], positions_xy[k][1] - self.agents[k].old_position[1])
+                target = (targets_xy[k][0] - self.agents[k].old_position[0], targets_xy[k][1] - self.agents[k].old_position[1])
+                self.agents[k].update_obstacles(obs[k][0], obs[k][1], (position[0] - 5, position[1] - 5))
+                self.agents[k].update_compass(obs[k][2])
+                self.agents[k].compute_shortest_path(start=position, goal=target)
+                next_node = self.agents[k].get_next_node()
                 actions.append(self.actions[(next_node[0] - position[0], next_node[1] - position[1])])
-                self.agents[k].watch_repeat(actions[k],k)
             else:
-                self.agents[k].stop -= 1
-                actions.append(self.actions[(next_node[1] - position[1], next_node[0] - position[0])])
+                if self.agents[k].stop > 0:
+                    self.agents[k].stop -= 1
+                else:
+                    self.agents[k].stop = 0
+                if self.agents[k].stay>1:
+                    arr = self.agents[k].get_open_steps()
+                    if len(arr)>1:
+                        actions.append(np.random.choice(arr))
+                    else:
+                        actions.append(arr[0])
+                else:
+                    actions.append(0)
+                self.agents[k].inaction += 1
+            self.agents[k].watch_repeat(actions[k])
+            self.agents[k].block_history = (6 - np.sum(self.agents[k].obs47))
         return actions
